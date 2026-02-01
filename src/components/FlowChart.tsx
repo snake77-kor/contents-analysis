@@ -1,23 +1,23 @@
 import React from 'react';
 import type { FlowStep } from '../types';
 
-const renderHighlightedText = (text: string, highlights: string[] | undefined) => {
-    if (!highlights || highlights.length === 0) {
-        return <>{text}</>;
-    }
-    const highlight = highlights[0];
-    if (!text.includes(highlight)) {
-        return <>{text}</>;
-    }
-    const parts = text.split(new RegExp(`(${highlight})`, 'g'));
-    return parts.map((part, index) =>
-        part === highlight ? (
-            <span key={index} className="bg-sky-100 text-sky-800 px-1 rounded-md">
-                {part}
-            </span>
-        ) : (
-            part
-        )
+const renderHighlightedText = (text: string, _legacyHighlights?: string[]) => {
+    // Split by **...**
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return (
+        <>
+            {parts.map((part, index) => {
+                if (part.startsWith('**') && part.endsWith('**')) {
+                    const content = part.slice(2, -2);
+                    return (
+                        <span key={index} className="bg-yellow-100 text-yellow-900 border-b-2 border-yellow-300 px-1 rounded mx-0.5 font-bold box-decoration-clone">
+                            {content}
+                        </span>
+                    );
+                }
+                return <span key={index}>{part}</span>;
+            })}
+        </>
     );
 };
 
@@ -36,34 +36,42 @@ interface FlowChartProps {
 
 export const FlowChart: React.FC<FlowChartProps> = ({ title, steps }) => {
     return (
-        <div className="border-2 border-pink-100 rounded-lg p-4 h-full flex flex-col">
-            <div className="flex items-center gap-2 mb-3 pb-3 border-b border-pink-200">
-                <FlowIcon />
-                <h3 className="text-base font-bold text-gray-800">{title}</h3>
-            </div>
-            <div className="flex-grow overflow-y-auto -mr-4 pr-4">
+        <div className="h-full flex flex-col pt-2">
+            <h3 className="text-lg font-bold text-gray-800 mb-6">{title}</h3>
+            <div className="flex-grow relative">
+                {/* Vertical Line for the whole flow */}
+                <div className="absolute left-4 top-2 bottom-0 w-0.5 bg-gray-200"></div>
+
                 {steps.map((step, index) => (
                     <React.Fragment key={index}>
-                        <div className="flex items-start gap-3">
-                            <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center font-bold text-white bg-teal-700 rounded-full text-sm">
+                        <div className="relative flex items-start gap-4 mb-8">
+                            {/* Step Number Circle */}
+                            <div className="relative z-10 flex-shrink-0 w-8 h-8 flex items-center justify-center font-bold text-white bg-teal-700 rounded-full text-sm ring-4 ring-white">
                                 {index + 1}
                             </div>
-                            <div className="flex-grow">
-                                <p className="font-bold text-gray-800">{step.title}</p>
-                                <p className="text-sm text-gray-600 mt-1">{renderHighlightedText(step.description, step.highlights)}</p>
+
+                            {/* Step Content */}
+                            <div className="pt-1">
+                                <p className="font-bold text-gray-900 text-lg mb-1">{step.title}</p>
+                                <p className="text-sm text-gray-600 leading-relaxed font-medium">
+                                    {renderHighlightedText(step.description, step.highlights)}
+                                </p>
                             </div>
                         </div>
 
-                        {index < steps.length - 1 && (
-                            <div className="my-2 flex flex-col items-center justify-center space-y-2">
-                                {step.connectorLabel && (
-                                    <span className="text-xs text-yellow-800 font-semibold bg-yellow-100 px-3 py-1 rounded-full">
-                                        {step.connectorLabel}
-                                    </span>
-                                )}
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-pink-300" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fillRule="evenodd" d="M10 2a.75.75 0 01.75.75v12.59l3.22-3.22a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.97 12.03a.75.75 0 011.06-1.06l3.22 3.22V2.75A.75.75 0 0110 2z" clipRule="evenodd" />
-                                </svg>
+                        {/* Connector Button/Capsule between steps */}
+                        {index < steps.length - 1 && step.connectorLabel && (
+                            <div className="relative z-10 w-fit ml-10 mb-8 -mt-4">
+                                <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-bold rounded-full border border-yellow-200 shadow-sm">
+                                    {step.connectorLabel}
+                                    <span className="block text-center text-[10px] text-yellow-600">↓</span>
+                                </span>
+                            </div>
+                        )}
+                        {/* If no connector label but there is a next step, add a simple arrow or just rely on the line */}
+                        {index < steps.length - 1 && !step.connectorLabel && (
+                            <div className="relative z-10 ml-[1.15rem] mb-6 text-gray-300">
+                                ↓
                             </div>
                         )}
                     </React.Fragment>

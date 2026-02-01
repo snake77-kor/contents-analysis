@@ -28,6 +28,7 @@ export interface AnalysisResult {
     titleEnglish: string;
     titleKorean: string;
     summaryEnglish: string;
+    summaryKorean: string;
     summaryAnnotations: SummaryAnnotation[];
     sentences: AnnotatedSentence[];
     flow: {
@@ -47,25 +48,25 @@ export interface TrueFalseQuestion {
     answer: boolean;
 }
 
-export interface VisualSummaryItem {
-    title: string;
-    description: string;
-    imageUrl: string;
+export interface VocabularyItem {
+    word: string;
+    meaning: string;
+    synonyms?: string; // Optional synonyms
 }
 
-export interface SimplifiedContent {
-    title: string;
-    text: string;
-    annotations: WordAnnotationSimple[];
+export interface FillInTheBlankQuestion {
+    question: string; // The sentence with a blank (e.g., "The _____ revolves around...")
+    answer: string;   // The correct word
+    options?: string[]; // Distractors (optional)
 }
 
 export interface AfterReadingContent {
     titleKorean: string;
     summaryKorean: string;
-    visualSummary: VisualSummaryItem[];
+    vocabularyList: VocabularyItem[]; // New: Vocab List
     comprehension: {
         trueFalse: TrueFalseQuestion[];
     };
-    simplified: SimplifiedContent;
+    fillInTheBlank: FillInTheBlankQuestion[]; // New: Cloze Test
     translation: string[];
 }

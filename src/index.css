@@ -7,3 +7,47 @@
     font-family: 'Inter', system-ui, sans-serif;
   }
 }
+
+@media print {
+  @page {
+    margin: 1cm;
+    size: A4 portrait;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-size: 10pt; /* Smaller font for print to fit one page */
+    background-color: white !important;
+  }
+
+  /* Hide UI elements not needed for print */
+  header, button, input, textarea, .no-print {
+    display: none !important;
+  }
+
+  /* Main container adjustments */
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
+  
+  /* Ensure the grid layout holds for print (AnalaysisView) */
+  .grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important; /* Force 2 columns */
+    gap: 1.5rem !important;
+  }
+
+  /* Shadow removal for cleaner print */
+  .shadow-lg, .shadow-sm {
+    box-shadow: none !important;
+  }
+
+  /* Add cut/fold line visual aid if possible, or just optimize spacing */
+  .border-gray-200 {
+    border-color: #eee !important;
+  }
+}

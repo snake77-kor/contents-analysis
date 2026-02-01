@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
-import type { AnalysisResult, AfterReadingContent, VisualSummaryItem, WordAnnotationSimple } from '../types';
+import type { AnalysisResult, AfterReadingContent } from '../types';
 
 if (!import.meta.env.VITE_API_KEY) {
     console.warn("VITE_API_KEY environment variable is not set. Please set it in .env file.");
@@ -14,6 +14,7 @@ const analysisSchema = {
         titleEnglish: { type: SchemaType.STRING, description: "The English title of the passage." },
         titleKorean: { type: SchemaType.STRING, description: "The Korean translation of the title." },
         summaryEnglish: { type: SchemaType.STRING, description: "A single, concise English sentence summarizing the passage." },
+        summaryKorean: { type: SchemaType.STRING, description: "Korean translation of the English summary." },
         summaryAnnotations: {
             type: SchemaType.ARRAY,
             items: {
@@ -30,8 +31,8 @@ const analysisSchema = {
             items: {
                 type: SchemaType.OBJECT,
                 properties: {
-                    original: { type: SchemaType.STRING, description: "The original English sentence." },
-                    translation: { type: SchemaType.STRING, description: "Direct translation tailored for learning." },
+                    original: { type: SchemaType.STRING, description: "The English sentence WITH chunking slashes '/' inserted at natural pause points (e.g., 'When you speak / with your palms facing up, / ...')." },
+                    translation: { type: SchemaType.STRING, description: "Korean translation tailored for learning, with KEYWORDS or PHRASES wrapped in double asterisks '**' for highlighting (e.g., '당신이 **손바닥을 위로 향하게** 하고 말할 때')." },
                     isTopicSentence: { type: SchemaType.BOOLEAN, description: "True if this is the core topic sentence." },
                     annotations: {
                         type: SchemaType.ARRAY,
@@ -39,8 +40,8 @@ const analysisSchema = {
                         items: {
                             type: SchemaType.OBJECT,
                             properties: {
-                                englishWordOrPhrase: { type: SchemaType.STRING, description: "The target word or phrase." },
-                                koreanAnnotation: { type: SchemaType.STRING, description: "Grammatical explanation or contextual meaning." },
+                                englishWordOrPhrase: { type: SchemaType.STRING, description: "The target word or phrase (WITHOUT slashes)." },
+                                koreanAnnotation: { type: SchemaType.STRING, description: "For Vocabulary: Meaning + (Synonym/Antonym). For Grammar: Brief grammatical term (e.g., '관계대명사', '분사구문')." },
                                 annotationType: { type: SchemaType.STRING, description: "'grammar', 'vocabulary', 'context', or 'connector'." },
                             },
                             required: ["englishWordOrPhrase", "koreanAnnotation", "annotationType"],
@@ -72,7 +73,7 @@ const analysisSchema = {
             required: ["title", "steps"]
         }
     },
-    required: ["passageNumber", "titleEnglish", "titleKorean", "summaryEnglish", "summaryAnnotations", "sentences", "flow"],
+    required: ["passageNumber", "titleEnglish", "titleKorean", "summaryEnglish", "summaryKorean", "summaryAnnotations", "sentences", "flow"],
 };
 
 export const analyzePassage = async (text: string): Promise<AnalysisResult> => {
@@ -83,20 +84,22 @@ export const analyzePassage = async (text: string): Promise<AnalysisResult> => {
         "titleEnglish": "Eng Title",
         "titleKorean": "Kor Title",
         "summaryEnglish": "Summary",
+        "summaryKorean": "Summary Meaning (Korean)",
         "summaryAnnotations": [{"englishWord": "word", "koreanAnnotation": "contextual meaning"}],
         "sentences": [
             {
-                "original": "Sentence",
-                "translation": "Korean Translation",
+                "original": "Sentence WITH chunking slashes '/' at natural pauses",
+                "translation": "Korean Translation with **highlights** on keywords",
                 "isTopicSentence": true/false,
-                "annotations": [{"englishWordOrPhrase": "phrase", "koreanAnnotation": "grammar/meaning", "annotationType": "grammar|vocabulary|context"}]
+                "annotations": [{"englishWordOrPhrase": "phrase (NO SLASHES)", "koreanAnnotation": "grammar/meaning", "annotationType": "grammar|vocabulary|context"}]
             }
         ],
         "flow": {
-            "title": "Logic Flow",
-            "steps": [{"title": "Step Key", "description": "Step Logic", "highlights": ["key phrase"]}]
+            "title": "논리 흐름 (Logical Flow)",
+            "steps": [{"title": "Korean Keyword (Step)", "description": "Korean Explanation of logic", "highlights": ["key phrase"]}]
         }
     }
+    IMPORTANT: The 'flow' section MUST be in **KOREAN**.
     Input: "${text}"`;
 
     try {
@@ -119,6 +122,7 @@ export const analyzePassage = async (text: string): Promise<AnalysisResult> => {
             titleEnglish: parsed.titleEnglish || "Untitled Passage",
             titleKorean: parsed.titleKorean || "제목 없음",
             summaryEnglish: parsed.summaryEnglish || parsed.mainTopicSentence || "No summary provided.",
+            summaryKorean: parsed.summaryKorean || "요약 없음",
             summaryAnnotations: Array.isArray(parsed.summaryAnnotations) ? parsed.summaryAnnotations : [],
             sentences: Array.isArray(parsed.sentences) ? parsed.sentences : [],
             flow: parsed.flow || (parsed.logicalFlow ? {
@@ -166,19 +170,17 @@ const wordAnnotationSimpleSchema = {
 const afterReadingSchema = {
     type: SchemaType.OBJECT,
     properties: {
-        titleKorean: { type: SchemaType.STRING },
-        summaryKorean: { type: SchemaType.STRING },
-        visualSummaryPrompts: {
+        titleKorean: { type: SchemaType.STRING, description: "Korean title of the passage." },
+        summaryKorean: { type: SchemaType.STRING, description: "Korean summary." },
+        vocabularyList: {
             type: SchemaType.ARRAY,
-            description: "4 Key scenes visualized with CHARACTERS.",
             items: {
                 type: SchemaType.OBJECT,
                 properties: {
-                    title: { type: SchemaType.STRING },
-                    description: { type: SchemaType.STRING },
-                    imagePrompt: { type: SchemaType.STRING, description: "A prompt for a scene where cute 2D characters (animals/people) ACT OUT the concept to explain it." }
+                    word: { type: SchemaType.STRING },
+                    meaning: { type: SchemaType.STRING, description: "Korean meaning" }
                 },
-                required: ["title", "description", "imagePrompt"]
+                required: ["word", "meaning"]
             }
         },
         comprehension: {
@@ -190,54 +192,57 @@ const afterReadingSchema = {
                         type: SchemaType.OBJECT,
                         properties: {
                             question: { type: SchemaType.STRING },
-                            annotations: { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT, properties: { englishWord: { type: SchemaType.STRING }, koreanAnnotation: { type: SchemaType.STRING } }, required: ["englishWord", "koreanAnnotation"] } },
-                            answer: { type: SchemaType.BOOLEAN }
+                            answer: { type: SchemaType.BOOLEAN },
+                            annotations: {
+                                type: SchemaType.ARRAY,
+                                items: wordAnnotationSimpleSchema
+                            }
                         },
-                        required: ["question", "annotations", "answer"]
+                        required: ["question", "answer"]
                     }
                 }
             },
             required: ["trueFalse"]
         },
-        simplified: {
-            type: SchemaType.OBJECT,
-            properties: {
-                title: { type: SchemaType.STRING },
-                text: { type: SchemaType.STRING },
-                annotations: { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT, properties: { englishWord: { type: SchemaType.STRING }, koreanAnnotation: { type: SchemaType.STRING } }, required: ["englishWord", "koreanAnnotation"] } }
-            },
-            required: ["title", "text", "annotations"]
+        fillInTheBlank: {
+            type: SchemaType.ARRAY,
+            items: {
+                type: SchemaType.OBJECT,
+                properties: {
+                    question: { type: SchemaType.STRING, description: "Sentence with a blank (_______)." },
+                    answer: { type: SchemaType.STRING, description: "Correct word." },
+                    options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, description: "3-4 options including answer." }
+                },
+                required: ["question", "answer"]
+            }
         },
         translation: {
             type: SchemaType.ARRAY,
-            items: { type: SchemaType.STRING }
+            items: { type: SchemaType.STRING, description: "Full Korean translation of the passage, sentence by sentence." }
         }
     },
-    required: ["titleKorean", "summaryKorean", "visualSummaryPrompts", "comprehension", "simplified", "translation"]
+    required: ["titleKorean", "summaryKorean", "vocabularyList", "comprehension", "fillInTheBlank", "translation"]
 };
-
-// Image generation is not directly supported in the standard text-generation models via this SDK in the same way.
-// We will simply use placeholders as discussed.
-const generateImage = async (prompt: string): Promise<string> => {
-    return "https://via.placeholder.com/400x300?text=" + encodeURIComponent(prompt.substring(0, 20));
-};
-
 
 export const generateAfterReadingContent = async (text: string): Promise<AfterReadingContent> => {
-    const prompt = `You are an expert curriculum developer. Create 'After Reading' activities for this English passage.
-    Focus on:
-    1. **Character-based Visualization**: For 'visualSummaryPrompts', describe scenes where **cute characters (e.g., bear, rabbit)** are acting out the situation to make the concept easy to understand.
-    2. **Reading Comprehension**: Check exact understanding of facts.
-    3. **Simplification**: Make the text simpler for students.
+    const prompt = `Generate 'After Reading' educational content for the following text.
+    Target Audience: High School Students.
     
-    Return JSON.
-    Text: "${text}"`;
+    1. **Vocabulary List**: Extract 5-8 key English vocabulary words with Korean meanings.
+    2. **True/False Questions**: Create 3-5 challenging questions based on the text.
+    3. **Fill-in-the-Blank**: Create 3-5 sentences summarizing key points, with the KEYWORD replaced by '_______'. Provide distractors if possible.
+    4. **Translation**: Provide a full Korean translation.
+    
+    Return JSON format adhering to the schema.
+    
+    Input: "${text}"`;
     try {
         const model = genAI.getGenerativeModel({
-            model: "gemini-flash-latest",
+            model: "gemini-1.5-flash",
             generationConfig: {
                 responseMimeType: "application/json",
-            }
+                responseSchema: afterReadingSchema,
+            },
         });
 
         const result = await model.generateContent(prompt);
@@ -252,22 +257,12 @@ export const generateAfterReadingContent = async (text: string): Promise<AfterRe
             throw new Error("Failed to parse.");
         }
 
-        // Mock images for now
-        const visualPrompts = Array.isArray(content.visualSummaryPrompts) ? content.visualSummaryPrompts : [];
-        const imageUrls = visualPrompts.map(() => "https://placehold.co/600x400/png?text=Character+Scene");
-
-        const visualSummary: VisualSummaryItem[] = visualPrompts.map((item: any, index: number) => ({
-            title: item.title || "Scene",
-            description: item.description || "",
-            imageUrl: imageUrls[index], // In a real app, we'd generate images from item.imagePrompt
-        }));
-
         return {
             titleKorean: content.titleKorean || "제목",
             summaryKorean: content.summaryKorean || "요약",
-            visualSummary,
+            vocabularyList: content.vocabularyList || [],
             comprehension: content.comprehension || { trueFalse: [] },
-            simplified: content.simplified || { title: "", text: "", annotations: [] },
+            fillInTheBlank: content.fillInTheBlank || [],
             translation: Array.isArray(content.translation) ? content.translation : [],
         };
 

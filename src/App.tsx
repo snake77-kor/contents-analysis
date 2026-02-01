@@ -39,8 +39,20 @@ const App: React.FC = () => {
         const textForApi = `--- Passage: ${passage.title} ---\n${passage.text}`;
 
         const mainAnalysisPromise = analyzePassage(textForApi);
-        const afterReadingPromise = generateAfterReadingContent(textForApi);
+        const afterReadingPromise = generateAfterReadingContent(textForApi).catch(afterReadingErr => {
+          console.warn("After Reading content generation failed, continuing with partial data:", afterReadingErr);
+          // Return a dummy object so the UI can still render the main analysis
+          return {
+            titleKorean: "분석 실패",
+            summaryKorean: "내용을 불러오지 못했습니다.",
+            vocabularyList: [],
+            comprehension: { trueFalse: [] },
+            fillInTheBlank: [],
+            translation: []
+          } as any;
+        });
 
+        // Use Promise.all but now the second promise won't reject entirely
         const [mainAnalysis, afterReading] = await Promise.all([mainAnalysisPromise, afterReadingPromise]);
 
         mainAnalysis.passageNumber = passage.title;
@@ -55,7 +67,7 @@ const App: React.FC = () => {
 
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+      setError(err instanceof Error ? err.message : 'An unknown error occurred during analysis.');
     } finally {
       setIsLoading(false);
     }
